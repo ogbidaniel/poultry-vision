@@ -11,18 +11,18 @@ from matplotlib.patches import FancyArrowPatch, Ellipse
 import numpy as np
 
 # ── Schema order (matches schema.py indices) ─────────────────────────────────
-# Index: name          color
+# Index 2 (back_neck) is the painted identification spot — ReID anchor ★
 SCHEMA_ORDER = [
-    (0,  "tail_base",   "#4895EF"),  # blue
-    (1,  "tail_tip",    "#ADE8F4"),  # light cyan
-    (2,  "left_hock",   "#FF9F1C"),  # amber
-    (3,  "right_hock",  "#9B5DE5"),  # violet
-    (4,  "left_foot",   "#FFBF69"),  # light amber
-    (5,  "right_foot",  "#C77DFF"),  # light violet
-    (6,  "neck_back",   "#E9C46A"),  # golden yellow
-    (7,  "middle_back", "#52B788"),  # sage green
-    (8,  "comb",        "#F4A261"),  # warm orange
-    (9,  "beak",        "#E63946"),  # crimson red
+    (0,  "beak",        "#E63946"),  # crimson red
+    (1,  "crown",       "#F4A261"),  # warm orange
+    (2,  "back_neck",   "#E9C46A"),  # golden yellow ★ ReID anchor
+    (3,  "middle_back", "#52B788"),  # sage green
+    (4,  "tail_base",   "#4895EF"),  # blue
+    (5,  "tail_tip",    "#ADE8F4"),  # light cyan
+    (6,  "left_hock",   "#FF9F1C"),  # amber
+    (7,  "left_foot",   "#FFBF69"),  # light amber
+    (8,  "right_hock",  "#9B5DE5"),  # violet
+    (9,  "right_foot",  "#C77DFF"),  # light violet
 ]
 
 COLORS = {name: color for _, name, color in SCHEMA_ORDER}
@@ -31,21 +31,21 @@ COLORS = {name: color for _, name, color in SCHEMA_ORDER}
 # Side-view: head on left, tail on right, ground at bottom
 KP = {
     "beak":         (0.07, 0.47),
-    "comb":         (0.12, 0.28),
-    "neck_back":    (0.27, 0.28),
+    "crown":        (0.12, 0.28),
+    "back_neck":    (0.27, 0.28),
     "middle_back":  (0.52, 0.22),
     "tail_base":    (0.77, 0.30),
     "tail_tip":     (0.95, 0.20),
     "left_hock":    (0.40, 0.67),
-    "right_hock":   (0.50, 0.71),
     "left_foot":    (0.33, 0.90),
+    "right_hock":   (0.50, 0.71),
     "right_foot":   (0.44, 0.90),
 }
 
 SKELETON = [
-    ("beak",        "comb"),
-    ("beak",        "neck_back"),
-    ("neck_back",   "middle_back"),
+    ("beak",        "crown"),
+    ("beak",        "back_neck"),
+    ("back_neck",   "middle_back"),
     ("middle_back", "tail_base"),
     ("tail_base",   "tail_tip"),
     ("tail_base",   "left_hock"),
@@ -156,14 +156,14 @@ for name, (x, y) in KP.items():
 # ── Labels ────────────────────────────────────────────────────────────────────
 LABEL_OFFSET = {
     "beak":         (-0.00, +0.07),
-    "comb":         (-0.02, -0.05),
-    "neck_back":    (+0.00, -0.06),
+    "crown":        (-0.02, -0.05),
+    "back_neck":    (+0.00, -0.06),
     "middle_back":  (+0.01, -0.06),
     "tail_base":    (+0.00, -0.06),
     "tail_tip":     (+0.01, -0.05),
     "left_hock":    (-0.09, +0.00),
-    "right_hock":   (+0.04, +0.00),
     "left_foot":    (-0.09, +0.04),
+    "right_hock":   (+0.04, +0.00),
     "right_foot":   (+0.04, +0.04),
 }
 
@@ -206,7 +206,7 @@ leg._legend_box.align = "left"
 ax.set_title("Laying Hen — Pose Estimation Schema (10 Keypoints)",
              fontsize=13, fontweight="bold", pad=12,
              color="#1A1A2E", fontfamily="DejaVu Sans")
-ax.text(0.50, 0.995, "Side view  ·  Left limbs: amber  ·  Right limbs: violet  ·  Spine: red → green → blue",
+ax.text(0.50, 0.995, "Side view  ·  Left limbs: amber  ·  Right limbs: violet  ·  Spine: red → green → blue  ·  ★ back_neck = painted ReID anchor",
         ha="center", va="bottom", fontsize=7, color="#888888",
         transform=ax.transAxes)
 

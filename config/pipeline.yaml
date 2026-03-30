@@ -1,0 +1,37 @@
+# ── Model ─────────────────────────────────────────────────────────────────────
+model_path: models/poultry-yolov12n-v1.pt
+
+# ── Source ────────────────────────────────────────────────────────────────────
+# int  → camera index (0 = default webcam)
+# str  → file path or RTSP URL  e.g. "rtsp://192.168.1.100/stream"
+source: 0
+
+# ── Inference ─────────────────────────────────────────────────────────────────
+confidence: 0.45
+iou: 0.45
+imgsz: 640
+device: cpu      # "cuda:0" for GPU
+
+# ── Database ──────────────────────────────────────────────────────────────────
+db_path: poultry.db
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+port: 7860
+
+# ── ReID ──────────────────────────────────────────────────────────────────────
+reid:
+  # Cosine similarity threshold for matching a detection to a known bird.
+  # Lower = more permissive (risk of merging different birds).
+  # Higher = stricter (risk of creating duplicate IDs for the same bird).
+  match_threshold: 0.82
+
+  # Mean HSV-Saturation of the back_neck patch below which the detection is
+  # treated as background (wood, litter). Tune upward if false positives persist.
+  min_saturation: 40
+
+  # Pixel radius of the crop around the back_neck keypoint.
+  patch_radius: 12
+
+  # EMA weight applied when updating a stored signature.
+  # Higher = adapts faster to lighting changes.
+  smooth_alpha: 0.15

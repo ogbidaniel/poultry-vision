@@ -153,43 +153,47 @@ class Schema:
 
 
 def create_poultry_schema() -> Schema:
-    """Hen pose schema — 10 keypoints covering head, spine, and legs."""
+    """Hen pose schema — 10 keypoints covering head, spine, and legs.
+
+    Index 2 (back_neck) is the painted identification spot used for ReID.
+    """
     return Schema(
         name="Poultry Pose",
-        version="1.0",
+        version="2.0",
         classes={0: "hen"},
         keypoints=[
-            # Index 0–1: tail
-            KeypointDef(name="tail_base", color="#4895EF", index=0),   # blue
-            KeypointDef(name="tail_tip",  color="#ADE8F4", index=1),   # light cyan
-            # Index 2–5: legs (left = warm, right = cool)
-            KeypointDef(name="left_hock",  color="#FF9F1C", index=2),  # amber
-            KeypointDef(name="right_hock", color="#9B5DE5", index=3),  # violet
-            KeypointDef(name="left_foot",  color="#FFBF69", index=4),  # light amber
-            KeypointDef(name="right_foot", color="#C77DFF", index=5),  # light violet
-            # Index 6–7: back / neck
-            KeypointDef(name="neck_back",   color="#E9C46A", index=6), # golden yellow
-            KeypointDef(name="middle_back", color="#52B788", index=7), # sage green
-            # Index 8–9: head
-            KeypointDef(name="comb", color="#F4A261", index=8),        # warm orange
-            KeypointDef(name="beak", color="#E63946", index=9),        # crimson red
+            # Index 0–1: head
+            KeypointDef(name="beak",        color="#E63946", index=0),  # crimson red
+            KeypointDef(name="crown",       color="#F4A261", index=1),  # warm orange
+            # Index 2–3: neck / back
+            KeypointDef(name="back_neck",   color="#E9C46A", index=2),  # golden ★ ReID anchor
+            KeypointDef(name="middle_back", color="#52B788", index=3),  # sage green
+            # Index 4–5: tail
+            KeypointDef(name="tail_base",   color="#4895EF", index=4),  # blue
+            KeypointDef(name="tail_tip",    color="#ADE8F4", index=5),  # light cyan
+            # Index 6–7: left leg (warm tones)
+            KeypointDef(name="left_hock",   color="#FF9F1C", index=6),  # amber
+            KeypointDef(name="left_foot",   color="#FFBF69", index=7),  # light amber
+            # Index 8–9: right leg (cool tones)
+            KeypointDef(name="right_hock",  color="#9B5DE5", index=8),  # violet
+            KeypointDef(name="right_foot",  color="#C77DFF", index=9),  # light violet
         ],
         skeleton=[
-            ("beak", "comb"),
-            ("beak", "neck_back"),
-            ("neck_back", "middle_back"),
+            ("beak",        "crown"),
+            ("beak",        "back_neck"),
+            ("back_neck",   "middle_back"),
             ("middle_back", "tail_base"),
-            ("tail_base", "tail_tip"),
-            ("tail_base", "left_hock"),
-            ("tail_base", "right_hock"),
+            ("tail_base",   "tail_tip"),
+            ("tail_base",   "left_hock"),
+            ("tail_base",   "right_hock"),
             ("middle_back", "left_hock"),
             ("middle_back", "right_hock"),
-            ("left_hock", "left_foot"),
-            ("right_hock", "right_foot"),
+            ("left_hock",   "left_foot"),
+            ("right_hock",  "right_foot"),
         ],
         flip_pairs=[
-            ("left_hock", "right_hock"),
-            ("left_foot", "right_foot"),
+            ("left_hock",  "right_hock"),
+            ("left_foot",  "right_foot"),
         ]
     )
 

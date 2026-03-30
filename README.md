@@ -1,10 +1,10 @@
-# Poultry-Pi-System
+# Poultry-Vision
 
 A production-ready computer vision system for automated monitoring and behavior analysis of poultry in cage-free environments. Built on **YOLOv12** with **ByteTrack** tracking, supporting dual-camera setups with frame synchronization.
 
 The system detects individual hens, feeders, and waterers in real-time, classifying hen behaviors (feeding, drinking, idle) while maintaining spatial state in world coordinates.
 
-**Research Paper**: [MDPI Agriculture 15(18):1963](https://www.mdpi.com/2077-0472/15/18/1963)
+**Research Paper**: Pre-Print
 
 ## Sample Inference
 
