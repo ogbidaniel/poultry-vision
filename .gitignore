@@ -21,3 +21,5 @@ seed.json
 pose-one.poselabel
 pose-minimal.poselabel
 data
+pose-v1
+notebooks/.ipynb_checkpoints/
