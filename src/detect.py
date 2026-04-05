@@ -4,12 +4,14 @@ Object detection wrapper around the Ultralytics YOLO model.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
-from ultralytics import YOLO
 
 from .types import Detection
+
+if TYPE_CHECKING:
+    from ultralytics import YOLO as _YOLO
 
 
 class Detector:
@@ -38,6 +40,8 @@ class Detector:
         imgsz: int = 640,
         device: str = "cpu",
     ) -> None:
+        from ultralytics import YOLO  # lazy — avoids importing torch at module load
+
         self.model = YOLO(model_path)
         self.conf = conf
         self.iou = iou
