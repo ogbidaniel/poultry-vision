@@ -1,33 +1,55 @@
 """
-SQLite live database — per-bird detection history and rolling stats.
-
-Tables
-------
-birds       id, registered_at, detection_count
-detections  per-frame records (ts, bird_id, conf, bbox, keypoints JSON)
-scores      rolling stats per bird (avg_conf, frame_count, mean position)
-
-All writes happen synchronously in-process. For high-throughput deployments
-swap the commit() calls to a WAL-mode write thread.
+I/O utilities: configuration loading, session management, and the SQLite
+live database for per-bird detection history.
 """
+
+from __future__ import annotations
 
 import json
 import sqlite3
 import time
 from pathlib import Path
+from typing import Any
 
 import numpy as np
+import yaml
 
+
+# ── Config helpers ────────────────────────────────────────────────────────────
+
+def load_config(path: str | Path) -> dict:
+    """Load a YAML config file and return it as a plain dict."""
+    with open(path) as f:
+        return yaml.safe_load(f) or {}
+
+
+def save_config(config: dict, path: str | Path) -> None:
+    """Write a dict to a YAML file."""
+    with open(path, "w") as f:
+        yaml.dump(config, f, default_flow_style=False)
+
+
+# ── SQLite live database ──────────────────────────────────────────────────────
 
 class Database:
-    def __init__(self, path: str = "poultry.db"):
+    """
+    SQLite database for per-bird detection history and rolling stats.
+
+    Tables
+    ------
+    birds       id, registered_at, detection_count
+    detections  per-frame records (ts, bird_id, conf, bbox, keypoints JSON)
+    scores      rolling stats per bird (avg_conf, frame_count, mean position)
+    """
+
+    def __init__(self, path: str = "poultry.db") -> None:
         self.path  = path
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._init_schema()
 
-    # ── Schema ───────────────────────────────────────────────────────────────
+    # ── Schema ────────────────────────────────────────────────────────────────
 
     def _init_schema(self) -> None:
         self._conn.executescript("""
@@ -62,7 +84,7 @@ class Database:
         """)
         self._conn.commit()
 
-    # ── Writes ───────────────────────────────────────────────────────────────
+    # ── Writes ────────────────────────────────────────────────────────────────
 
     def write_detection(
         self,
@@ -70,10 +92,9 @@ class Database:
         bird_id: int,
         box: np.ndarray,
         conf: float,
-        kps: np.ndarray,
+        kps: np.ndarray | None = None,
     ) -> None:
         """Record a single detection and update rolling scores."""
-        # Register bird if first time seen
         self._conn.execute(
             "INSERT OR IGNORE INTO birds (id, registered_at) VALUES (?, ?)",
             (bird_id, ts),
@@ -83,11 +104,12 @@ class Database:
             (bird_id,),
         )
 
+        kps_json = json.dumps(kps.tolist()) if kps is not None else None
         self._conn.execute(
             """INSERT INTO detections
                (ts, bird_id, conf, box_x1, box_y1, box_x2, box_y2, keypoints)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (ts, bird_id, conf, *map(float, box[:4]), json.dumps(kps.tolist())),
+            (ts, bird_id, conf, *map(float, box[:4]), kps_json),
         )
 
         cx = float((box[0] + box[2]) / 2)
@@ -106,13 +128,12 @@ class Database:
                                  / (frame_count + 1)""",
             (bird_id, ts, conf, cx, cy),
         )
-
         self._conn.commit()
 
     # ── Reads ─────────────────────────────────────────────────────────────────
 
-    def get_bird_stats(self) -> list[dict]:
-        """Return live stats for all birds, ordered by ID. Used by dashboard."""
+    def get_bird_stats(self) -> list[dict[str, Any]]:
+        """Return live stats for all birds, ordered by ID."""
         rows = self._conn.execute("""
             SELECT
                 b.id,
