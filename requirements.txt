@@ -10,7 +10,7 @@ scipy==1.13.0
 # onnxslim==0.1.31
 # onnxruntime==1.18.0 # Using CPU version for macOS
 gradio==4.44.1
-opencv-python==4.9.0.80
+opencv-contrib-python==4.9.0.80
 psutil==5.9.8
 py-cpuinfo==9.0.0
 huggingface-hub==0.23.2 # The intended version
@@ -19,3 +19,4 @@ numpy==1.26.4
 supervision==0.22.0
 PyQt6
 jupyterlab
+

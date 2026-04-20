@@ -15,11 +15,18 @@ models/*.pt
 # Large video files
 samplevideos/*.mp4
 samplevideos/*.avi
+samples/samplevideos/*.mp4
+samples/samplevideos/*.avi
+samples/samplevideos/*.mov
+samples/samplevideos/*.mkv
+samples/sampleimages/
 
-.vscode/ 
+.vscode/
 seed.json
 pose-one.poselabel
 pose-minimal.poselabel
 data
 pose-v1
 notebooks/.ipynb_checkpoints/
+docs/
+context/

@@ -5,10 +5,10 @@ cameras:
   # Top-down camera (primary view)
   top:
     name: top
-    type: usb           # usb, rtsp, or file
-    source: "0"         # Device index for USB, URL for RTSP, path for file
-    width: 1920
-    height: 1080
+    type: rtsp          # usb, rtsp, or file
+    source: "rtsp://admin:Poultry2026!@10.80.187.200:554/h264Preview_01_main"
+    width: 2560
+    height: 1920
     fps: 30
     rotation: 0         # 0, 90, 180, or 270 degrees
     buffer_size: 30
@@ -16,19 +16,19 @@ cameras:
   # Side-angle camera (secondary view)
   side:
     name: side
-    type: rtsp
-    source: "rtsp://100.68.7.57:8554/low_cam"
-    width: 1920
-    height: 1080
+    type: usb
+    source: "0"         # Logitech C920 on the Pi
+    width: 1280
+    height: 720
     fps: 30
     rotation: 180       # Camera mounted upside down
     buffer_size: 30
 
 # Frame synchronization settings
 sync:
-  tolerance_ms: 50      # Maximum timestamp difference for frame matching
+  tolerance_ms: 75      # Maximum timestamp difference for frame matching
   buffer_size: 30       # Ring buffer size for each camera
-  primary_camera: top   # Primary camera drives synchronization
+  primary_camera: side  # Lower-latency USB camera drives synchronization
 
 # RTSP-specific settings
 rtsp:
