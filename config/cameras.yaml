@@ -18,11 +18,13 @@ cameras:
     name: side
     type: usb
     source: "0"         # Logitech C920 on the Pi
-    width: 1280
+    width: 960
     height: 720
     fps: 30
     rotation: 180       # Camera mounted upside down
     buffer_size: 30
+    backend: v4l2
+    fourcc: MJPG
 
 # Frame synchronization settings
 sync:

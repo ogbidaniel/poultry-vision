@@ -75,14 +75,15 @@ class Pipeline:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def run(self, source: int | str) -> Generator[FrameResult, None, None]:
+    def run(self, source: int | str | FrameSource) -> Generator[FrameResult, None, None]:
         """
         Process *source* frame by frame, yielding a :class:`FrameResult` for
         each frame.
 
         *source* may be a camera index (int), a file path, or an RTSP URL.
         """
-        with FrameSource(source) as cam:
+        cam = source if isinstance(source, FrameSource) else FrameSource(source)
+        with cam:
             for frame in cam:
                 result = self._process_frame(frame)
                 yield result

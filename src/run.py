@@ -39,7 +39,9 @@ from pathlib import Path
 
 import cv2
 
-from .io_utils import load_config
+from .capture import FrameSource
+from .io_utils import load_config, load_merged_config
+from .multiview import load_camera_specs
 from .pipeline import Pipeline
 
 
@@ -52,6 +54,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--source", "-s", default="0",
                    help="Camera index, video file path, or RTSP URL  (default: 0)")
+    p.add_argument("--camera", choices=["top", "side"],
+                   help="Named camera from config/cameras.yaml")
+    p.add_argument("--camera-config", default="config/cameras.yaml",
+                   help="Camera YAML config file  (default: config/cameras.yaml)")
     p.add_argument("--model", "-m", default="models/poultry-yolov12n-v1.pt",
                    help="Path to YOLO model weights")
     p.add_argument("--config", "-c", default="config/system.yaml",
@@ -70,11 +76,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _resolve_config(args: argparse.Namespace) -> dict:
     """Load config file and override with CLI arguments."""
-    config_path = Path(args.config)
-    if config_path.exists():
-        config = load_config(config_path)
-    else:
-        config = {}
+    config = load_merged_config(args.config, args.camera_config)
 
     # CLI arguments take precedence
     if args.model:
@@ -88,7 +90,7 @@ def _resolve_config(args: argparse.Namespace) -> dict:
 
 # ── Terminal mode ─────────────────────────────────────────────────────────────
 
-def _run_terminal(source: int | str, config: dict, args: argparse.Namespace) -> None:
+def _run_terminal(source: int | str | FrameSource, config: dict, args: argparse.Namespace) -> None:
     """
     OpenCV display loop.  Press 'q' to quit, 's' to save a screenshot.
     """
@@ -126,7 +128,7 @@ def _run_terminal(source: int | str, config: dict, args: argparse.Namespace) -> 
 
 # ── Dashboard mode ────────────────────────────────────────────────────────────
 
-def _run_dashboard(source: int | str, config: dict, port: int) -> None:
+def _run_dashboard(source: int | str | FrameSource, config: dict, port: int) -> None:
     """
     Gradio web dashboard with live video stream and per-bird stats table.
     """
@@ -204,8 +206,12 @@ def main() -> None:
     config = _resolve_config(args)
 
     # Resolve source type
-    raw = args.source
-    source: int | str = int(raw) if raw.isdigit() else raw
+    if args.camera:
+        cameras, _ = load_camera_specs(args.camera_config)
+        source: int | str | FrameSource = FrameSource(cameras[args.camera])
+    else:
+        raw = args.source
+        source = int(raw) if raw.isdigit() else raw
 
     if args.mode == "dashboard":
         _run_dashboard(source, config, args.port)

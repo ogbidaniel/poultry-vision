@@ -23,6 +23,22 @@ def load_config(path: str | Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
+def load_merged_config(*paths: str | Path) -> dict:
+    """Load multiple YAML files and merge them shallowly from left to right."""
+    merged: dict = {}
+    for path in paths:
+        file_path = Path(path)
+        if not file_path.exists():
+            continue
+        data = load_config(file_path)
+        for key, value in data.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = {**merged[key], **value}
+            else:
+                merged[key] = value
+    return merged
+
+
 def save_config(config: dict, path: str | Path) -> None:
     """Write a dict to a YAML file."""
     with open(path, "w") as f:
