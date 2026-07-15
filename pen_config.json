@@ -1,0 +1,190 @@
+{
+  "treatment": "treatment1",
+  "cameras": {
+    "top": "cam0",
+    "side": "cam1"
+  },
+  "dataset_root": "dataset/treatment1",
+  "pen": {
+    "width_m": 1.5,
+    "length_m": 2.74,
+    "wall_height_m": 0.91
+  },
+  "camera_positions": {
+    "top": {
+      "x": 0.74,
+      "y": 1.37,
+      "z": 2.29
+    },
+    "side": {
+      "x": 0.69,
+      "y": 0.08,
+      "z": 0.52
+    }
+  },
+  "num_birds": 5,
+  "track_timeout_s": 2.0,
+  "marker_colors": [
+    "green",
+    "black",
+    "red",
+    "blue",
+    "yellow"
+  ],
+  "keypoints": [
+    "tail_base",
+    "tail_tip",
+    "left_hock",
+    "right_hock",
+    "left_foot",
+    "right_foot",
+    "neck_back",
+    "middle_back",
+    "comb",
+    "beak"
+  ],
+  "models": {
+    "segmentation": "models/poultry-seg-large.pt",
+    "pose": "models/hen_pose_yolo12s_scratch.pt",
+    "detection": "models/det0-yolo12s.pt"
+  },
+  "feeder_stabilize_frames": 30,
+  "sync_tolerance_ms": 75.0,
+  "homographies": {
+    "H_top_floor": [
+      [
+        -0.005088293897821871,
+        0.000640041956317332,
+        2.44119473300596
+      ],
+      [
+        -4.8499135461894e-05,
+        -0.005019660520305968,
+        2.3099895724822535
+      ],
+      [
+        -6.468893244879347e-05,
+        0.0009020318802619138,
+        1.0
+      ]
+    ],
+    "H_side_top": [
+      [
+        1.1805133282590663,
+        1.3823673365836626,
+        -171.7645050409873
+      ],
+      [
+        0.03485247706745,
+        2.7052793138992333,
+        -632.6333843262503
+      ],
+      [
+        6.652028032993201e-06,
+        0.0031446959479589135,
+        1.0
+      ]
+    ],
+    "H_side_floor": [
+      [
+        -0.013550176302561999,
+        0.0053908170786483925,
+        6.607408822756366
+      ],
+      [
+        -0.000492297517130581,
+        -0.014490474143542592,
+        12.47327329528084
+      ],
+      [
+        -8.69009641819618e-05,
+        0.012476896055968197,
+        1.0
+      ]
+    ]
+  },
+  "calibration_points": {
+    "frame_idx": 30,
+    "cam0_near_corners": {
+      "near_left": [
+        123.0,
+        459.0
+      ],
+      "near_right": [
+        537.0,
+        455.0
+      ]
+    },
+    "cam1_far_corners": {
+      "far_left": [
+        183.0,
+        199.0
+      ],
+      "far_right": [
+        566.0,
+        197.0
+      ]
+    },
+    "tie_points": {
+      "cam0": [
+        [
+          476.0,
+          74.0
+        ],
+        [
+          223.0,
+          200.0
+        ],
+        [
+          163.0,
+          71.0
+        ],
+        [
+          158.0,
+          112.0
+        ],
+        [
+          482.0,
+          40.0
+        ],
+        [
+          248.0,
+          241.0
+        ]
+      ],
+      "cam1": [
+        [
+          592.0,
+          264.0
+        ],
+        [
+          108.0,
+          397.0
+        ],
+        [
+          75.0,
+          282.0
+        ],
+        [
+          42.0,
+          317.0
+        ],
+        [
+          584.0,
+          253.0
+        ],
+        [
+          125.0,
+          448.0
+        ]
+      ]
+    }
+  },
+  "coordinate_system": {
+    "origin": "front-left floor corner nearest the side camera (= near-RIGHT corner in the video)",
+    "x_axis": "across width, 0 -> width_m, increasing toward video-left",
+    "y_axis": "along length, 0 (camera/near end) -> length_m (far wall)",
+    "units": "meters",
+    "note": "Both cameras are at the near end. Floor frame matches the physical Spatial_Setup, so camera_positions and floor (x,y) share one frame."
+  }
+}

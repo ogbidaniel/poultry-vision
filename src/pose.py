@@ -17,8 +17,9 @@ import numpy as np
 from .detect import Detector
 from .types import Detection
 
-# Index of the back_neck keypoint in the 10-kp poultry schema
-BACK_NECK_IDX = 2
+# Index of neck_back keypoint in the NEW 10-kp schema (hen_pose_yolo12s_scratch.pt)
+# Old schema had back_neck at index 2 — the current model uses index 6.
+BACK_NECK_IDX = 6
 
 
 class PoseDetector(Detector):

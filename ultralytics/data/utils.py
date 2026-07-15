@@ -49,10 +49,13 @@ def img2label_paths(img_paths):
 
 def get_hash(paths):
     """Returns a single hash value of a list of paths (files or dirs)."""
-    size = sum(os.path.getsize(p) for p in paths if os.path.exists(p))  # sizes
-    h = hashlib.sha256(str(size).encode())  # hash sizes
-    h.update("".join(paths).encode())  # hash paths
-    return h.hexdigest()  # return hash
+    h = hashlib.sha256()
+    for path in paths:
+        h.update(path.encode())
+        if os.path.exists(path):
+            stat = os.stat(path)
+            h.update(f"{stat.st_size}:{stat.st_mtime_ns}".encode())
+    return h.hexdigest()
 
 
 def exif_size(img: Image.Image):

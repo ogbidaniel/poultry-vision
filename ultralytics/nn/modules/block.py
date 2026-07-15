@@ -1214,11 +1214,44 @@ class AAttn(nn.Module):
         self.pe = Conv(all_head_dim, dim, 5, 1, 2, g=dim, act=False)
 
 
+    def __setstate__(self, state):
+        """Restore instance state; back-fill all_head_dim for new-style checkpoints."""
+        super().__setstate__(state)
+        if not hasattr(self, "all_head_dim"):
+            self.all_head_dim = self.head_dim * self.num_heads
+
     def forward(self, x):
-        """Processes the input tensor 'x' through the area-attention"""
+        """Forward pass — dispatches on qkv (new-style) vs qk+v (old-style)."""
         B, C, H, W = x.shape
         N = H * W
 
+        if hasattr(self, "qkv"):
+            # New-style checkpoint: combined qkv conv (all_head_dim * 3)
+            all_head_dim = getattr(self, "all_head_dim", self.head_dim * self.num_heads)
+            qkv = self.qkv(x).flatten(2).transpose(1, 2)
+            if self.area > 1:
+                qkv = qkv.reshape(B * self.area, N // self.area, all_head_dim * 3)
+                B, N, _ = qkv.shape
+            q, k, v = (
+                qkv.view(B, N, self.num_heads, self.head_dim * 3)
+                .permute(0, 2, 3, 1)
+                .split([self.head_dim, self.head_dim, self.head_dim], dim=2)
+            )
+            attn = (q.transpose(-2, -1) @ k) * (self.head_dim ** -0.5)
+            attn = attn.softmax(dim=-1)
+            x = v @ attn.transpose(-2, -1)
+            x = x.permute(0, 3, 1, 2)
+            v = v.permute(0, 3, 1, 2)
+            if self.area > 1:
+                x = x.reshape(B // self.area, N * self.area, all_head_dim)
+                v = v.reshape(B // self.area, N * self.area, all_head_dim)
+                B, N, _ = x.shape
+            x = x.reshape(B, H, W, all_head_dim).permute(0, 3, 1, 2).contiguous()
+            v = v.reshape(B, H, W, all_head_dim).permute(0, 3, 1, 2).contiguous()
+            x = x + self.pe(v)
+            return self.proj(x)
+
+        # Old-style checkpoint: separate qk conv + v conv
         qk = self.qk(x).flatten(2).transpose(1, 2)
         v = self.v(x)
         pp = self.pe(v)
@@ -1234,7 +1267,6 @@ class AAttn(nn.Module):
             q = q.view(B, N, self.num_heads, self.head_dim)
             k = k.view(B, N, self.num_heads, self.head_dim)
             v = v.view(B, N, self.num_heads, self.head_dim)
-
             x = flash_attn_func(
                 q.contiguous().half(),
                 k.contiguous().half(),
