@@ -40,24 +40,47 @@ class SyncSettings:
     primary_camera: str = "side"
 
 
-def load_camera_specs(path: str | Path) -> tuple[dict[str, CameraSourceConfig], SyncSettings]:
+def _rtsp_uri(host: str, port: int, stream_path: str) -> str:
+    return f"rtsp://{host}:{port}/{stream_path}"
+
+
+def load_camera_specs(
+    path: str | Path, location: str = "pi"
+) -> tuple[dict[str, CameraSourceConfig], SyncSettings]:
+    """Load camera specs from a MediaMTX-style config.
+
+    All cameras are served by MediaMTX as RTSP; each entry's ``path`` is the
+    stream name and the URI is built as ``rtsp://{host}:{port}/{path}`` with the
+    host selected by *location* (``pi`` -> ``host_local``, ``remote`` ->
+    ``host_remote``). An older ``source``-based schema is still accepted as a
+    fallback. Credentials are never stored here — MediaMTX handles them.
+    """
     data = load_config(path)
+    mm = data.get("mediamtx") or {}
+    host = mm.get("host_local", "localhost") if location == "pi" else mm.get("host_remote")
+    port = int(mm.get("port", 8554) or 8554)
+
     cameras = {}
     for name, raw in (data.get("cameras") or {}).items():
-        source = raw.get("source", name)
-        if isinstance(source, str) and source.isdigit():
-            source = int(source)
+        if mm and raw.get("path") is not None:          # new MediaMTX schema
+            source: int | str = _rtsp_uri(host, port, raw["path"])
+            ctype = "rtsp"
+        else:                                           # legacy source-based schema
+            source = raw.get("source", name)
+            if isinstance(source, str) and source.isdigit():
+                source = int(source)
+            ctype = raw.get("type", raw.get("camera_type", "usb"))
         cameras[name] = CameraSourceConfig(
             name=name,
             source=source,
-            camera_type=raw.get("type", raw.get("camera_type", "usb")),
+            camera_type=ctype,
             width=int(raw.get("width", 0) or 0),
             height=int(raw.get("height", 0) or 0),
             fps=float(raw.get("fps", 30.0) or 30.0),
             rotation=int(raw.get("rotation", 0) or 0),
             buffer_size=int(raw.get("buffer_size", 1) or 1),
-            backend=raw.get("backend", "v4l2" if raw.get("type") == "usb" else "ffmpeg"),
-            fourcc=raw.get("fourcc", "MJPG" if raw.get("type") == "usb" else None),
+            backend=raw.get("backend", "ffmpeg" if ctype == "rtsp" else "v4l2"),
+            fourcc=raw.get("fourcc", None if ctype == "rtsp" else "MJPG"),
             rtsp_transport=(data.get("rtsp") or {}).get("transport", "tcp"),
         )
 
@@ -68,6 +91,22 @@ def load_camera_specs(path: str | Path) -> tuple[dict[str, CameraSourceConfig], 
         primary_camera=sync_raw.get("primary_camera", "side"),
     )
     return cameras, sync
+
+
+def camera_roles(path: str | Path) -> dict[str, str]:
+    """Logical role -> physical camera-name map (may be empty)."""
+    return dict(load_config(path).get("roles") or {})
+
+
+def resolve_role(
+    path: str | Path, role: str, location: str = "pi"
+) -> Optional[CameraSourceConfig]:
+    """Resolve a logical role (or a physical camera name) to its
+    ``CameraSourceConfig``, or ``None`` if that stream is not configured on this
+    deployment. Lets a Pi with only a subset of cameras run what it has."""
+    cam_name = camera_roles(path).get(role, role)
+    cameras, _ = load_camera_specs(path, location=location)
+    return cameras.get(cam_name)
 
 
 class RingBufferSynchronizer:

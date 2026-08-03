@@ -34,6 +34,13 @@ re-clicking::
 
     python calibrate_corners.py --recompute
 
+The **Reolink global-top** camera, by contrast, sees the ENTIRE floor, so its
+floor homography is a plain four-corner rectification — click the four floor
+corners directly, no borrow-solve:
+
+    python calibrate_corners.py --reolink --reolink-image floor.jpg
+    python calibrate_corners.py --reolink --location pi --top main   # grab from the live stream
+
 Usage
 -----
     python calibrate_corners.py [--config pen_config.json] [--frame-idx 30]
@@ -64,6 +71,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -638,6 +646,153 @@ def _fmt_m(pt: tuple) -> str:
     return f"({pt[0]:.3f}, {pt[1]:.3f})"
 
 
+# ── Reolink global-top calibration ────────────────────────────────────────────
+# The Reolink "global top" camera sees the ENTIRE pen floor, so — unlike the two
+# partial USB views — all four floor corners are directly visible and the floor
+# homography is a plain four-corner rectification (no borrow-solve needed).
+
+_REOLINK_ORDER = ["(0,0) ORIGIN", "(W,0)", "(W,L)", "(0,L)"]  # click order, around the pen
+
+
+def _grab_rtsp_frame(uri: str, warmup: int = 15) -> np.ndarray:
+    os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+    cap = cv2.VideoCapture(uri, getattr(cv2, "CAP_FFMPEG", cv2.CAP_ANY))
+    if not cap.isOpened():
+        raise RuntimeError(f"Cannot open RTSP stream: {uri}")
+    frame = None
+    for _ in range(warmup):
+        ok, f = cap.read()
+        if ok:
+            frame = f
+    cap.release()
+    if frame is None:
+        raise RuntimeError(f"No frame read from {uri}")
+    return frame
+
+
+def _load_reolink_frame(
+    image: Optional[str], source: Optional[str], frame_idx: int,
+    cameras_cfg: str, location: str, top: str,
+) -> np.ndarray:
+    """Grab a global-top frame from a still image, a video/RTSP source, or the
+    top camera role resolved from the MediaMTX camera config."""
+    if image:
+        frame = cv2.imread(image)
+        if frame is None:
+            raise RuntimeError(f"Cannot read image: {image}")
+        return frame
+    if source:
+        if str(source).startswith("rtsp://"):
+            return _grab_rtsp_frame(source)
+        return _load_frame(Path(source), frame_idx)
+    # Resolve the top camera role from config/cameras.yaml.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from src.multiview import resolve_role
+    role = "top_hq" if top == "main" else "top_live"
+    cam = resolve_role(cameras_cfg, role, location)
+    if cam is None:
+        raise RuntimeError(f"Camera role '{role}' not found in {cameras_cfg}")
+    print(f"Grabbing a frame from {role} -> {cam.source}")
+    return _grab_rtsp_frame(str(cam.source))
+
+
+def _click_four_corners(frame: np.ndarray, title: str, hint: str) -> Optional[list]:
+    """Single-view clicker for the 4 pen-floor corners; returns points in the
+    ORIGINAL frame's pixel coordinates (in _REOLINK_ORDER), or None if cancelled."""
+    h = _PANEL_HEIGHT
+    disp = cv2.resize(frame, (int(frame.shape[1] * h / frame.shape[0]), h))
+    sx = frame.shape[1] / disp.shape[1]
+    sy = frame.shape[0] / disp.shape[0]
+    pts: list[tuple[float, float]] = []
+    state = {"done": False, "quit": False}
+
+    def on_mouse(event: int, x: int, y: int, *_) -> None:
+        if event == cv2.EVENT_LBUTTONDOWN and len(pts) < 4:
+            pts.append((x * sx, y * sy))     # store in original-frame coords
+
+    wn = "Reolink global-top floor calibration"
+    cv2.namedWindow(wn, cv2.WINDOW_NORMAL)
+    cv2.setMouseCallback(wn, on_mouse)
+    banner_h = 74
+    while not state["done"] and not state["quit"]:
+        o = disp.copy()
+        _label(o, "global-top (full floor)")
+        for i, (px, py) in enumerate(pts):
+            dx, dy = int(px / sx), int(py / sy)
+            cv2.circle(o, (dx, dy), 7, (0, 220, 255), -1)
+            cv2.putText(o, f"{i+1} {_REOLINK_ORDER[i]}", (dx + 8, dy - 6),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 220, 255), 1)
+        for a, b in zip(pts, pts[1:]):
+            cv2.line(o, (int(a[0]/sx), int(a[1]/sy)), (int(b[0]/sx), int(b[1]/sy)), (0, 220, 255), 1)
+        if len(pts) == 4:
+            cv2.line(o, (int(pts[3][0]/sx), int(pts[3][1]/sy)),
+                     (int(pts[0][0]/sx), int(pts[0][1]/sy)), (0, 220, 255), 1)
+        banner = np.zeros((banner_h, o.shape[1], 3), dtype=np.uint8)
+        status = f"corners: {len(pts)}/4" + ("   OK - press [s]" if len(pts) == 4 else "")
+        for i, line in enumerate([title, hint,
+                                  status + "   |   [u] undo  [r] reset  [s] confirm  [q] quit"]):
+            cv2.putText(banner, line, (10, 20 + i * 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.imshow(wn, np.vstack([o, banner]))
+        key = cv2.waitKey(20) & 0xFF
+        if key == ord("u") and pts:
+            pts.pop()
+        elif key == ord("r"):
+            pts.clear()
+        elif key == ord("s") and len(pts) == 4:
+            state["done"] = True
+        elif key == ord("q"):
+            state["quit"] = True
+    cv2.destroyAllWindows()
+    return None if state["quit"] else pts
+
+
+def calibrate_reolink(
+    config_path: Path, *, image: Optional[str] = None, source: Optional[str] = None,
+    frame_idx: int = 30, cameras_cfg: str = "config/cameras.yaml",
+    location: str = "pi", top: str = "main",
+) -> None:
+    """Direct four-corner floor rectification for the Reolink global-top camera.
+
+    Writes ``H_reolink_floor`` (Reolink pixel → metric floor) to the config; the
+    two-USB-view borrow-solve homographies are left untouched.
+    """
+    with config_path.open() as f:
+        cfg = json.load(f)
+    pen_w = float(cfg["pen"]["width_m"])
+    pen_l = float(cfg["pen"]["length_m"])
+
+    frame = _load_reolink_frame(image, source, frame_idx, cameras_cfg, location, top)
+
+    corners = _click_four_corners(
+        frame,
+        title="REOLINK global-top: click the 4 floor corners, in order",
+        hint="1: (0,0) ORIGIN   2: (W,0)   3: (W,L)   4: (0,L)   — go around the pen",
+    )
+    if corners is None:
+        sys.exit("Calibration cancelled.")
+
+    metric = [(0.0, 0.0), (pen_w, 0.0), (pen_w, pen_l), (0.0, pen_l)]
+    H_reolink_floor = _homography(corners, metric)
+
+    print("\nCorner reprojection (clicked -> metric):")
+    for pt, met, lbl in zip(corners, metric, _REOLINK_ORDER):
+        proj = _project(pt, H_reolink_floor)
+        err = float(np.linalg.norm(np.array(proj) - np.array(met)))
+        print(f"  {lbl}: -> {_fmt_m(proj)} m  expect {_fmt_m(met)}  err={err:.4f} m")
+
+    cfg.setdefault("homographies", {})["H_reolink_floor"] = H_reolink_floor.tolist()
+    cfg.setdefault("calibration_points", {})["reolink_corners"] = {
+        "points": [list(p) for p in corners],
+        "order": _REOLINK_ORDER,
+        "frame_source": image or source or f"{top} role via {cameras_cfg}",
+    }
+    with config_path.open("w") as f:
+        json.dump(cfg, f, indent=2)
+    print(f"\nH_reolink_floor saved to {config_path}")
+    print("Reolink global-top calibration complete.")
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -654,11 +809,31 @@ def main() -> None:
     parser.add_argument("--recompute", action="store_true",
                         help="Rebuild homographies from saved calibration_points "
                              "(no re-clicking).")
+    # Reolink global-top: direct four-corner floor rectification (sees whole floor).
+    parser.add_argument("--reolink", action="store_true",
+                        help="Calibrate the Reolink global-top cam by clicking the "
+                             "4 floor corners directly (writes H_reolink_floor).")
+    parser.add_argument("--reolink-image",
+                        help="Still image of the pen floor from the global-top cam.")
+    parser.add_argument("--reolink-source",
+                        help="Video file or rtsp:// URL for the global-top cam.")
+    parser.add_argument("--cameras", default="config/cameras.yaml",
+                        help="Camera config used to resolve the top role for --reolink.")
+    parser.add_argument("--location", choices=["pi", "remote"], default="pi",
+                        help="host_local (pi) vs host_remote/Tailscale (remote) RTSP URIs.")
+    parser.add_argument("--top", choices=["sub", "main"], default="main",
+                        help="Reolink stream quality to grab for calibration.")
     args = parser.parse_args()
     path = Path(args.config)
     if not path.exists():
         sys.exit(f"Config not found: {path}")
-    if args.recompute:
+    if args.reolink:
+        calibrate_reolink(
+            path, image=args.reolink_image, source=args.reolink_source,
+            frame_idx=args.frame_idx, cameras_cfg=args.cameras,
+            location=args.location, top=args.top,
+        )
+    elif args.recompute:
         recompute(path)
     else:
         calibrate(path, args.frame_idx)

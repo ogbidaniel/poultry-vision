@@ -1,39 +1,72 @@
-# Camera Configuration for Poultry Vision System
-# Supports USB cameras and RTSP streams
+# Camera configuration — MediaMTX RTSP gateway
+# ---------------------------------------------------------------------------
+# ALL cameras are served by MediaMTX on the Pi as RTSP streams. Application
+# code must open these RTSP paths, NEVER /dev/video* directly (MediaMTX owns
+# the USB devices and republishes them).
+#
+# Reolink credentials live ONLY in the Pi's local mediamtx.yml — never here.
+#
+# This repo deploys to MULTIPLE Pis. `host_remote` is per-deployment (each Pi
+# has its own Tailscale IP). On the Pi itself use `host_local`; from another
+# machine over Tailscale use `host_remote`. Select with --location {pi,remote}.
+#
+# Cameras/roles are OPTIONAL: some Pis have only the two USB cams and no
+# Reolink (yet). The resolver skips any role whose stream is absent.
+# ---------------------------------------------------------------------------
 
+mediamtx:
+  host_local: localhost
+  host_remote: 100.68.7.57      # per-Pi — change for each deployment
+  port: 8554
+
+# type: rtsp for all — the URI is built as rtsp://{host}:{port}/{path}
 cameras:
-  # Top-down camera (primary view)
-  top:
-    name: top
-    type: rtsp          # usb, rtsp, or file
-    source: "rtsp://admin:Poultry2026!@10.80.187.200:554/h264Preview_01_main"
+  # Reolink "global top" camera — full pen-floor coverage. OPTIONAL: not on
+  # every Pi yet. Two MediaMTX streams (main = HQ/offline, sub = live).
+  cam_top_main:
+    type: rtsp
+    path: cam_top_main          # 2560x1920 @30, HQ recording / dataset / offline inference
     width: 2560
     height: 1920
     fps: 30
-    rotation: 0         # 0, 90, 180, or 270 degrees
-    buffer_size: 30
-
-  # Side-angle camera (secondary view)
-  side:
-    name: side
-    type: usb
-    source: "0"         # Logitech C920 on the Pi
-    width: 960
-    height: 720
+  cam_top_sub:
+    type: rtsp
+    path: cam_top_sub           # 640x480 @30, live preview / low-cost inference
+    width: 640
+    height: 480
     fps: 30
-    rotation: 180       # Camera mounted upside down
-    buffer_size: 30
-    backend: v4l2
-    fourcc: MJPG
 
-# Frame synchronization settings
+  # USB cameras (Logitech C920) republished by MediaMTX.
+  cam0:
+    type: rtsp
+    path: cam0                  # USB near-floor top view
+    width: 640
+    height: 480
+    fps: 15
+  cam1:
+    type: rtsp
+    path: cam1                  # USB lateral / side view
+    width: 640
+    height: 480
+    fps: 15
+
+# Logical pipeline roles -> physical stream. All optional; a deployment that
+# lacks a stream simply omits/keeps the mapping and the resolver skips it.
+roles:
+  top_live: cam_top_sub         # default live top-down (Reolink substream)
+  top_hq:   cam_top_main        # high-quality / offline top-down
+  side:     cam1                # lateral posture view
+  top_usb:  cam0                # legacy USB near-floor top
+
+# Frame synchronization (multiview — later stage). Tolerance absorbs the
+# Reolink 30 fps vs USB 15 fps mismatch.
 sync:
-  tolerance_ms: 75      # Maximum timestamp difference for frame matching
-  buffer_size: 30       # Ring buffer size for each camera
-  primary_camera: side  # Lower-latency USB camera drives synchronization
+  tolerance_ms: 120
+  buffer_size: 30
+  primary_camera: cam1          # lower-latency USB drives pairing
 
-# RTSP-specific settings
+# RTSP transport / reconnect behaviour.
 rtsp:
-  transport: tcp        # tcp or udp
-  reconnect_delay_s: 2  # Initial reconnect delay
+  transport: tcp
+  reconnect_delay_s: 2
   max_reconnect_delay_s: 30

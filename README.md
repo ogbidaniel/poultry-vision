@@ -1,70 +1,130 @@
-# Poultry Vision — multi-view laying-hen monitoring
+# Poultry Vision
 
-A low-cost, multi-view computer-vision system for continuous behavior monitoring
-of laying hens, targeting a Raspberry Pi 5 + Hailo edge deployment. Two
-synchronized cameras (overhead + lateral) are fused into a shared metric floor
-frame; the five color-painted hens are tracked by **color identity**, and posture
-is recovered with a **YOLOv12 pose** model run on per-hen crops. Built on a local
-**YOLOv12** fork (`ultralytics/`).
+**A lightweight multi-view edge-AI system for continuous behavior monitoring of
+laying hens.**
 
-## Pipeline at a glance
-```
-cam0 (top)  ─┐                              ┌─ color identity (5 fixed slots)
-             ├─ detect + track per camera ──┤
-cam1 (side) ─┘     │                         └─ floor-gating (reject off-floor)
-                   ▼
-        homography borrow-solve  ──► shared metric floor frame
-                   │
-                   └─ pose on hen crops ──► keypoints ──► behavior (planned)
-```
+Poultry Vision monitors individual laying hens in cage-free pens from two
+synchronized, low-cost camera views and reports their daily feeding, drinking, and
+nesting behavior. Birds that look identical are told apart by a **color-as-identity**
+scheme, the two views are fused onto a shared **metric floor frame** by planar
+homography, and posture is recovered with a compact **pose** model — all designed to
+run on an affordable **Raspberry Pi 5 + Hailo-8** edge platform, inside the barn,
+without cloud servers.
 
-## Repository structure
+This repository accompanies our manuscript on multi-view laying-hen monitoring
+(Prairie View A&M University, Poultry Center).
+
+<p align="center">
+  <img src="assets/system_architecture.png" alt="System architecture" width="85%">
+</p>
+
+## Highlights
+- **Multi-view perception.** An overhead camera maps the whole pen floor while a
+  lateral camera captures posture and gait; the two are combined into one metric,
+  floor-referenced frame.
+- **Color-as-identity.** Five distinctly paint-marked hens are kept apart by a
+  mask-based color signature with uniqueness-constrained temporal voting — no
+  re-identification network required.
+- **Behavior from the fused pen state.** Feeding and drinking from resource-zone
+  occupancy; nesting from prolonged stationary dwell; activity from floor motion +
+  posture.
+- **Edge-first.** Instance segmentation, pose estimation, and tracking on a
+  Raspberry Pi 5 with a Hailo-8 accelerator.
+
+## System in action
+The system overlays detections, color identities, and inferred behavior on both
+views, and places every bird on a shared floor map.
+
+<p align="center">
+  <img src="assets/behavior_feeding.png" alt="Feeding" width="88%"><br>
+  <img src="assets/behavior_drinking.png" alt="Drinking" width="88%"><br>
+  <img src="assets/behavior_laying.png" alt="Nesting" width="88%">
+</p>
+
+Aggregated over the multi-day recording, each hen's behavior is summarized as an
+hourly ethogram (identity is maintained throughout; feeding concentrates in the day,
+nesting at night):
+
+<p align="center">
+  <img src="assets/behavior_timeline.png" alt="Per-hen behavior ethogram" width="90%">
+</p>
+
+## Hardware
+- **Compute:** Raspberry Pi 5 (4 GB) + Hailo-8 AI HAT+ accelerator.
+- **Cameras:** two Logitech C920 USB webcams (overhead + lateral) and a Reolink
+  global-top camera that covers the entire pen floor.
+- **Pen:** 1.50 m × 2.74 m × 0.91 m, wood-shaving litter, four nest boxes, one feeder,
+  one waterer; five color-marked hens per pen.
+
+Cameras are served on the Pi as RTSP streams (via MediaMTX) and consumed by role;
+see [`config/cameras.yaml`](config/cameras.yaml).
+
+## Models & results
+Perception uses the single-stage **YOLOv12** family (a vendored fork in
+[`ultralytics/`](ultralytics/)). Held-out test performance:
+
+| Task | View | Model | Metric | Score |
+|------|------|-------|--------|------:|
+| Detection + instance segmentation | Top-down | YOLOv12s-seg | box / mask mAP@0.5 | **0.980 / 0.981** |
+| Pose (10 keypoints) | Lateral (crops) | YOLOv12s-pose | keypoint mAP@0.5 | **0.643** |
+| Cross-view calibration | Both | Homography (borrow-solve) | mean floor agreement | **0.028 m** |
+
+<p align="center">
+  <img src="assets/segmentation_sample.jpg" alt="Segmentation sample" width="45%">
+  <img src="assets/pose_sample.jpg" alt="Pose sample" width="45%">
+</p>
+
+## Dataset
+- **Detection / segmentation:** 947 annotated images, three classes
+  (feeder, hen, waterer), 8,591 instances.
+- **Pose:** 205 annotated images (682 hen instances) on a 10-keypoint anatomical
+  schema (beak, comb, neck/back, tail, and left/right hock & foot), extended with
+  per-hen crops that match the crop-based inference path.
+
+## Repository layout
 | Path | Contents |
 |------|----------|
-| `src/` | Runtime modules: `floor.py` (calibration projection + gating), `identity.py` (color-as-identity tracker), `color_marker.py`, `multiview.py` (sync), `geometry.py`, `pen_overlay.py`, detect/track/pose helpers |
-| `scripts/track_pen.py` | Dual-camera detect + track + color identity + live floor map |
-| `calibrate_corners.py` | Interactive floor calibration (overlap-tie-point **borrow-solve**); `--recompute` rebuilds from saved clicks |
-| `scripts/` | Data + training tooling: `build_hen_crops.py`, `extract_pose_crops.py`, `extract_crops_from_regions.py`, `merge_pose_crops.py`, `augment_pose_dataset.py`, `train_pose.py`, `train_seg.py`, `calibrate_intrinsics.py`, figure generators |
-| `config/` | Model configs: `yolov12s-pose-hen.yaml`, `yolov12s-seg.yaml` |
-| `experiments/` | Notebooks the researcher runs: `crop_hens/`, `eval_pose_crops/`, `mine_hard_poses/` (see its README) |
-| `MDPI_Poultry_Multi_View_Camera_2026/` | The paper (LaTeX source: `main.tex`, `assets/`, `figures/`, `Definitions/`, `ref.bib`) |
-| `research/` | Reference papers + notes for the literature review (gitignored; see its README) |
-| `pen_config.json` | Pen geometry, camera positions, homographies, coordinate convention |
-| `dataset/`, `runs/`, `models/` | Datasets, training runs, weights (gitignored) |
-
-## Datasets
-- **Segmentation/detection** (`dataset/segment/merged_poultry_dataset`): 947 images,
-  3 classes (feeder/hen/waterer), labeled in Roboflow.
-- **Pose** (`dataset/pose/...`): hand-taken photos + extracted lateral frames,
-  hen-only with a 10-keypoint schema; extended with per-hen **crops** that match
-  the crop-based inference path.
-
-## Common workflows
-```bash
-# Floor calibration (click points once per pen), then recompute if needed
-python calibrate_corners.py --config pen_config.json --frame-idx 30
-python calibrate_corners.py --recompute
-
-# Live dual-camera detection + tracking + color identity
-python scripts/track_pen.py --config pen_config.json --pair 20260605_141702 --walls
-
-# Pose crop pipeline: extract -> merge -> augment -> train
-python scripts/extract_pose_crops.py
-python scripts/build_pose_v5.py
-python scripts/augment_pose_dataset.py --src <merged> --dst <merged-aug>
-python scripts/train_pose.py --data <merged-aug>/data.yaml --name hen_pose_yolo12s_aug_v5
-python scripts/train_seg.py                      # YOLOv12 segmentation
-```
+| `src/` | Runtime pipeline — calibrated floor projection & gating (`floor.py`), color identity (`identity.py`, `color_marker.py`), capture (`capture.py`), camera roles & sync (`multiview.py`), behavior (`behavior.py`), geometry & overlays, detect/pose/track helpers |
+| `scripts/track_pen.py` | Multi-camera detection + tracking + color identity + floor map |
+| `scripts/calibration/` | ChArUco / stereo intrinsic & extrinsic calibration toolkit |
+| `calibrate_corners.py` | Interactive floor calibration (overlap tie-point *borrow-solve*, and direct four-corner clicking from the global-top camera) |
+| `config/` | Camera roles (`cameras.yaml`), system / label / resource configs, model definitions |
+| `models/hailo/` | Compiled Hailo detection models (`.hef`) + labels |
+| `pen_config.json` | Pen geometry, camera placement, homographies, coordinate convention |
+| `assets/` | Figures and inference / training samples used here and in the paper |
 
 ## Installation
-See `docs/setup.md` for per-platform commands. In brief:
 ```bash
+python -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-pip install torch torchvision
-pip install -e .        # the bundled YOLOv12 fork
+pip install -e .                     # the vendored YOLOv12 fork
 ```
 
-## Models
-The deployed perception models are **YOLOv12** throughout: instance segmentation
-(top-down) and pose (lateral, run on crops). Calibration of the C920 intrinsics
-for accurate Z/wall overlay is documented in `docs/calibration_checkerboard.md`.
+## Usage
+```bash
+# One-time floor calibration (click pen-floor corners), then reuse
+python calibrate_corners.py --config pen_config.json
+
+# Multi-camera detection + tracking + color identity + floor map
+python scripts/track_pen.py --pair 20260605_141702 --csv out.csv        # recorded
+python scripts/track_pen.py --live --location pi --top sub               # live (on the Pi)
+```
+
+## Citation
+If you use this work, please cite our paper (details to be updated on publication):
+
+```bibtex
+@article{poultryvision2026,
+  title   = {A Lightweight Multi-View Edge-AI Framework for Laying-Hen Behavior Monitoring},
+  author  = {Ogbuigwe, Daniel and Rhaman, Fyaz and Owono Afugu Ntoo, Joaquin and
+             Ahmed, Ahmed Abdelmoamen and Abdel-Wareth, Ahmed A. A. and Lohakare, Jayant},
+  year    = {2026},
+  note    = {Prairie View A\&M University}
+}
+```
+
+## Acknowledgments
+Prairie View A&M University — Department of Computer Science and the Poultry Center,
+College of Agriculture, Food and Natural Resources. Supported in part by the U.S.
+National Science Foundation (grants #2200377 and #2302469).

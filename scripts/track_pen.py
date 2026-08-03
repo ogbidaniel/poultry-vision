@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import csv as _csv
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -55,7 +56,7 @@ from ultralytics import YOLO
 from src.color_marker import classify_neck_color
 from src.floor import FloorModel
 from src.identity import ColorIdentityTracker, HenSlot, Observation
-from src.multiview import RingBufferSynchronizer, SyncSettings, TimestampedFrame
+from src.multiview import RingBufferSynchronizer, SyncSettings, TimestampedFrame, resolve_role
 from src.pen_overlay import PenProjector, draw_floor_boundary, draw_walls, load_intrinsics
 
 # Detection class ids (det0-yolo12s.pt: {0: feeder, 1: hen, 2: waterer})
@@ -423,22 +424,42 @@ def main() -> None:
     ap.add_argument("--max-frames", type=int, default=None,
                     help="Stop after N frames (for quick previews)")
     ap.add_argument("--no-show", action="store_true")
+    # Live RTSP camera roles (MediaMTX) — see config/cameras.yaml
+    ap.add_argument("--live", action="store_true",
+                    help="Open live RTSP camera roles from --cameras instead of files")
+    ap.add_argument("--cameras", default="config/cameras.yaml",
+                    help="Camera config (MediaMTX RTSP roles) used with --live")
+    ap.add_argument("--location", choices=["pi", "remote"], default="remote",
+                    help="Use host_local (on the Pi) or host_remote/Tailscale (remote) URIs")
+    ap.add_argument("--top", choices=["sub", "main"], default="sub",
+                    help="Reolink top-cam quality for --live (sub=live, main=HQ)")
     args = ap.parse_args()
 
     with open(args.config) as f:
         cfg = json.load(f)
 
-    if args.pair:
+    if args.live:
+        # MediaMTX RTSP: open by logical role; never touch /dev/video* directly.
+        os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+        top_role = "top_hq" if args.top == "main" else "top_live"
+        top = resolve_role(args.cameras, top_role, args.location)
+        side = resolve_role(args.cameras, "side", args.location)
+        missing = [r for r, c in ((top_role, top), ("side", side)) if c is None]
+        if missing:
+            sys.exit(f"--live: camera role(s) not configured in {args.cameras}: {missing}")
+        cam0, cam1 = top.source, side.source            # RTSP URI strings
+    elif args.pair:
         root = Path(cfg["dataset_root"])
         cam0 = root / cfg["cameras"]["top"] / f"{args.pair}.mp4"
         cam1 = root / cfg["cameras"]["side"] / f"{args.pair}.mp4"
     elif args.cam0 and args.cam1:
-        cam0, cam1 = Path(args.cam0), Path(args.cam1)
+        cam0, cam1 = args.cam0, args.cam1
     else:
-        ap.error("Provide --pair, or both --cam0 and --cam1")
+        ap.error("Provide --live, --pair, or both --cam0 and --cam1")
 
+    # Local file paths must exist; RTSP URIs are opened lazily by OpenCV/FFmpeg.
     for p in (cam0, cam1):
-        if not p.exists():
+        if not str(p).startswith("rtsp://") and not Path(p).exists():
             sys.exit(f"Video not found: {p}")
 
     model_path = args.model or cfg.get("models", {}).get("detection", "models/det0-yolo12s.pt")

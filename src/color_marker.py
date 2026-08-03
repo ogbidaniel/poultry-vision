@@ -36,6 +36,68 @@ _BOX_MIN_SAT_PIXELS  = 20     # bbox method: min high-sat pixels to consider rel
 _BOX_BLACK_RATIO     = 0.04   # bbox method: fraction of very-dark pixels → black paint
 _BOX_MIN_COLOR_PIXELS = 15    # bbox method: min pixels matching a color range
 
+COLORS = ["red", "blue", "green", "yellow", "black"]
+
+
+def color_scores(
+    frame: np.ndarray,
+    mask: np.ndarray,
+    kp: Optional[np.ndarray] = None,
+    patch_radius: int = 18,
+    min_kp_conf: float = 0.3,
+) -> dict[str, float]:
+    """
+    Per-color paint scores for one hen, restricted to its segmentation mask.
+
+    Scoring only the masked hen pixels excludes background (the red pan feeder or
+    the black tarp behind the bird), which is what corrupts a plain bbox crop.
+    When the neck_back keypoint is available the scoring is further focused on a
+    disk around it (the dorsal paint), avoiding the red comb on the head.
+
+    Parameters
+    ----------
+    frame : BGR image.
+    mask  : (H, W) hen instance mask (bool or 0/1), in frame coordinates.
+    kp    : (10, 3) keypoints [x, y, conf] in frame coordinates, or None.
+
+    Returns
+    -------
+    dict mapping each of COLORS to a score in [0, 1]. All-zero if too few pixels.
+    """
+    h, w = frame.shape[:2]
+    region = np.asarray(mask).astype(bool)
+    if region.shape != (h, w):
+        region = cv2.resize(region.astype(np.uint8), (w, h),
+                            interpolation=cv2.INTER_NEAREST).astype(bool)
+
+    if kp is not None and len(kp) > NECK_BACK_IDX and float(kp[NECK_BACK_IDX][2]) >= min_kp_conf:
+        nx, ny = int(kp[NECK_BACK_IDX][0]), int(kp[NECK_BACK_IDX][1])
+        disk = np.zeros((h, w), np.uint8)
+        cv2.circle(disk, (nx, ny), patch_radius, 1, -1)
+        focus = region & disk.astype(bool)
+        if int(focus.sum()) >= 8:
+            region = focus
+
+    n_region = int(region.sum())
+    scores = {c: 0.0 for c in COLORS}
+    if n_region < 8:
+        return scores
+
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    high_sat = region & (hsv[:, :, 1] > _HIGH_SAT_THRESHOLD)
+    n_high = int(high_sat.sum())
+    # black = dark masked pixels (paint is near-black regardless of saturation)
+    scores["black"] = float((region & (hsv[:, :, 2] < 50)).sum()) / n_region
+    if n_high > 0:
+        for color, ranges in _COLOR_RANGES.items():
+            if color == "black":
+                continue
+            m = np.zeros((h, w), dtype=bool)
+            for lo, hi in ranges:
+                m |= cv2.inRange(hsv, lo, hi).astype(bool)
+            scores[color] = float((m & high_sat).sum()) / n_high
+    return scores
+
 
 def classify_neck_color(
     frame: np.ndarray,

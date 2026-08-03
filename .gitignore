@@ -1,59 +1,29 @@
+# ── Python ─────────────────────────────────────────────────────────
 *__pycache__/
-ultralytics.egg-info
-runs/
-.claude
-.poultry-data
-poultry-data/
 *.pyc
 *.pyo
 .DS_Store
-dataset/
 
-# Large model files
-models/*.pt
-!models/poultry-yolov12n-v1.pt
-
-# Large video files
-samplevideos/*.mp4
-samplevideos/*.avi
-samples/samplevideos/*.mp4
-samples/samplevideos/*.avi
-samples/samplevideos/*.mov
-samples/samplevideos/*.mkv
-samples/sampleimages/
-
+# ── Environments / editors / tools ─────────────────────────────────
+.venv/
 .vscode/
-seed.json
-pose-one.poselabel
-pose-minimal.poselabel
-data
-pose-v1
-notebooks/.ipynb_checkpoints/
-docs/
-context/
+.claude
+ultralytics.egg-info
+# machine-local paths, never commit
+ultralytics/settings.json
 
-# === consolidation: weights, generated data, research, scratch ===
-# All model weights (stray root *.pt, notebooks/*.pt); keep the tracked baseline
+# ── Model weights ──────────────────────────────────────────────────
+# Ignore all PyTorch weights. Hailo models under models/hailo/ (*.hef,
+# labels.txt, README.txt) are NOT weights-by-extension and remain tracked
+# so a Pi clone has the detection models ready.
 *.pt
-!models/poultry-yolov12n-v1.pt
+
+# ── Data / generated artifacts (regenerated locally; never committed) ─
+dataset/
+runs/
 output/
 hen_crops/
-research/
-.tectonic/
-*.bak
-*.poselabel
-experiments/**/_*.png
+pipeline_figures/
 
-# LaTeX build artifacts (keep source: .tex, assets/, figures/, Definitions/, ref.bib)
-MDPI_Poultry_Multi_View_Camera_2026/main.pdf
-MDPI_Poultry_Multi_View_Camera_2026/build.log
-MDPI_Poultry_Multi_View_Camera_2026/*.aux
-MDPI_Poultry_Multi_View_Camera_2026/*.log
-MDPI_Poultry_Multi_View_Camera_2026/*.out
-MDPI_Poultry_Multi_View_Camera_2026/*.toc
-MDPI_Poultry_Multi_View_Camera_2026/*.bbl
-MDPI_Poultry_Multi_View_Camera_2026/*.blg
-MDPI_Poultry_Multi_View_Camera_2026/*.fls
-MDPI_Poultry_Multi_View_Camera_2026/*.fdb_latexmk
-MDPI_Poultry_Multi_View_Camera_2026/*.synctex.gz
-MDPI_Poultry_Multi_View_Camera_2026/Definitions/*-eps-converted-to.pdf
+# ── Hailo package tarballs (commit the extracted models/hailo/, not the tar) ─
+poultry-pi-hef-package-*.tar.gz
